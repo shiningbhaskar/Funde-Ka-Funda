@@ -181,15 +181,12 @@
 <div class="app" id="app"></div>
 <script>
 const app = document.getElementById('app');
-window.onerror = function(msg, url, line, col, error){
-  alert('Page error: ' + msg + ' (line ' + line + ')'); // temporary diagnostic
-};
 let state = { view:'form', length:'standard', pack:null, activeTab:'script', calendar:[], generating:false, error:null, subCount:null };
 
 // PASTE YOUR GOOGLE APPS SCRIPT WEB APP URL AND ADMIN SECRET HERE
 // (same values you used when setting up fkf-newsletter-backend.gs)
-const BACKEND_URL = "https://script.google.com/macros/s/AKfycbxN0A8sRhNZDSr7Veclh7leIx2DzRGJhXxCPawN8xzkppVOtfTaiitebSqcqpjNip-iiw/exec";
-const ADMIN_SECRET = "FKF-2026-Startup";
+const BACKEND_URL = "PASTE_YOUR_APPS_SCRIPT_URL_HERE";
+const ADMIN_SECRET = "PASTE_YOUR_ADMIN_SECRET_HERE";
 
 function backendReady(){
   return BACKEND_URL && BACKEND_URL.indexOf('script.google.com') !== -1;
@@ -327,9 +324,7 @@ function renderForm(main){
       state.trendSuggestions = await findTrendingTopics();
     }catch(e){
       state.trendSuggestions = null;
-      const msg = 'Search failed: ' + (e && e.message ? e.message : String(e));
-      state.trendError = msg;
-      alert(msg); // temporary — lets you see the real error on a phone with no dev console
+      state.trendError = 'Search failed: ' + (e && e.message ? e.message : String(e));
     }
     state.trendLoading = false;
     render();
@@ -356,9 +351,7 @@ function renderForm(main){
       render();
     }catch(e){
       state.generating = false;
-      const msg = 'Generation failed: ' + (e && e.message ? e.message : String(e));
-      state.error = msg;
-      alert(msg); // temporary — lets you see the real error on a phone with no dev console
+      state.error = 'Generation failed: ' + (e && e.message ? e.message : String(e));
       render();
     }
   };
@@ -372,7 +365,7 @@ function renderTrendResults(container){
   if(!state.trendSuggestions || !state.trendSuggestions.length) return;
   container.innerHTML = state.trendSuggestions.map((s,i)=>`
     <div class="thumb-card" style="margin-top:10px;">
-      <div class="scene-head">${s.why_trending}</div>
+      <div class="scene-head">${s.why_trending}${s.search_interest ? ` · 📈 ${s.search_interest}` : ''}</div>
       <div class="slide-title" style="margin:4px 0;">${s.topic}</div>
       <div class="thumb-desc" style="margin-bottom:8px;">Hook: "${s.suggested_hook}"</div>
       <button class="btn btn-gold btn-small" data-i="${i}">Use This Topic</button>
@@ -386,6 +379,25 @@ function renderTrendResults(container){
       render();
     };
   });
+}
+
+function packTabText(p, tab){
+  if(tab==='script'){
+    return `🎬 ${p.hook}\n\n` + p.script_scenes.map(s=>`SCENE ${s.scene_number} (~${s.duration_hint_sec}s)\n${s.script_hinglish}\n[${s.visual_note}]`).join('\n\n');
+  }
+  if(tab==='slides'){
+    return p.slide_outline.map(s=>`SLIDE ${s.slide_number}: ${s.title}\n${s.bullets.map(b=>'- '+b).join('\n')}`).join('\n\n');
+  }
+  if(tab==='thumb'){
+    return p.thumbnail_concepts.map(t=>`${t.concept.toUpperCase()}\nText overlay: "${t.text_overlay}"\n${t.visual_description}`).join('\n\n');
+  }
+  if(tab==='yt'){
+    return `TITLE OPTIONS\n${p.youtube.title_options.map(t=>'- '+t).join('\n')}\n\nDESCRIPTION\n${p.youtube.description}\n\nTAGS\n${p.youtube.tags.join(', ')}`;
+  }
+  if(tab==='news'){
+    return `SUBJECT: ${p.newsletter_issue.subject_line}\n\n${p.newsletter_issue.body_hinglish}`;
+  }
+  return '';
 }
 
 function renderResult(main){
@@ -406,6 +418,18 @@ function renderResult(main){
     tabsBar.appendChild(t);
   });
   wrap.appendChild(tabsBar);
+
+  const copyRow = document.createElement('div');
+  copyRow.style.textAlign = 'right';
+  copyRow.style.marginBottom = '6px';
+  copyRow.innerHTML = `<button class="copy-btn" id="copyTabBtn" style="float:none;">Copy this tab</button>`;
+  wrap.appendChild(copyRow);
+  copyRow.querySelector('#copyTabBtn').onclick = (e)=>{
+    navigator.clipboard.writeText(packTabText(p, state.activeTab)).then(()=>{
+      e.target.textContent = 'Copied!';
+      setTimeout(()=>{ e.target.textContent = 'Copy this tab'; }, 1500);
+    });
+  };
 
   const card = document.createElement('div');
   card.className = 'card';
@@ -589,11 +613,33 @@ function buildWhatsappMessage(ep){
 
 function renderCalendarSection(main){
   const wrap = document.createElement('div');
-  wrap.innerHTML = `<div class="section-title">Content Calendar</div>`;
+  wrap.innerHTML = `
+    <div class="section-title" style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
+      <span>Content Calendar</span>
+      <span>
+        <button class="copy-btn" id="exportBtn" style="float:none;">Export</button>
+        <button class="copy-btn" id="importBtn" style="float:none;">Import</button>
+      </span>
+    </div>
+    <input type="file" id="importFile" accept="application/json" style="display:none;">
+  `;
+  if(state.calendar.length > 3){
+    const search = document.createElement('input');
+    search.type = 'text';
+    search.placeholder = 'Search episodes…';
+    search.style.marginBottom = '10px';
+    search.value = state.calendarFilter || '';
+    search.oninput = (e)=>{ state.calendarFilter = e.target.value; render(); };
+    wrap.appendChild(search);
+  }
+  const q = (state.calendarFilter||'').toLowerCase();
+  const filtered = q ? state.calendar.filter(ep=>ep.topic.toLowerCase().includes(q)) : state.calendar;
   if(!state.calendar.length){
     wrap.innerHTML += `<div class="empty-hint">No episodes yet — generate your first one above and save it here.</div>`;
+  } else if(!filtered.length){
+    wrap.innerHTML += `<div class="empty-hint">No episodes match "${state.calendarFilter}".</div>`;
   } else {
-    state.calendar.forEach(ep=>{
+    filtered.forEach(ep=>{
       const item = document.createElement('div');
       item.className = 'cal-item';
       item.innerHTML = `
@@ -608,6 +654,33 @@ function renderCalendarSection(main){
     });
   }
   main.appendChild(wrap);
+
+  wrap.querySelector('#exportBtn').onclick = ()=>{
+    const blob = new Blob([JSON.stringify(state.calendar, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `sunday-studio-backup-${new Date().toISOString().slice(0,10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+  wrap.querySelector('#importBtn').onclick = ()=> wrap.querySelector('#importFile').click();
+  wrap.querySelector('#importFile').onchange = async (e)=>{
+    const file = e.target.files[0];
+    if(!file) return;
+    try{
+      const text = await file.text();
+      const imported = JSON.parse(text);
+      if(!Array.isArray(imported)) throw new Error('File is not a valid backup.');
+      const existingIds = new Set(state.calendar.map(ep=>ep.id));
+      const merged = imported.filter(ep=>!existingIds.has(ep.id));
+      state.calendar = [...merged, ...state.calendar];
+      await saveCalendar();
+      render();
+    }catch(err){
+      alert('Import failed: ' + (err && err.message ? err.message : String(err)));
+    }
+  };
 }
 
 (async function init(){
