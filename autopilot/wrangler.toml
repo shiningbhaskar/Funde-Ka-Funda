@@ -1,0 +1,29 @@
+name = "funde-autopilot"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+
+# Every 15 min: publish due posts. 00:30 UTC (06:00 IST) daily: pull numbers.
+[triggers]
+crons = ["*/15 * * * *", "30 0 * * *"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "funde-autopilot"
+database_id = "PASTE_D1_DATABASE_ID_HERE"
+
+[[r2_buckets]]
+binding = "MEDIA"
+bucket_name = "funde-media"
+
+[vars]
+GRAPH_VERSION = "v23.0"
+IG_USER_ID = "PASTE_INSTAGRAM_BUSINESS_ACCOUNT_ID"
+FB_PAGE_ID = "PASTE_FACEBOOK_PAGE_ID"
+YT_HANDLE = "@fundekafundaofficial"
+# Public r2.dev URL of the funde-media bucket, no trailing slash
+MEDIA_PUBLIC_BASE = "https://pub-PASTE.r2.dev"
+
+# Secrets (set with `npx wrangler secret put NAME`, never written here):
+#   ADMIN_KEY   - password for the scheduler page
+#   META_TOKEN  - long-lived Facebook Page access token (covers Instagram too)
+#   YT_API_KEY  - YouTube Data API v3 key (read-only public numbers)
